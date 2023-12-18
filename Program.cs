@@ -17,7 +17,7 @@ internal class Program
                         webBuilder.ConfigureServices(services =>
                         {
                             services.AddControllers();
-                            services.AddScoped<CustomerRankingService>();
+                            services.AddSingleton<CustomerRankingService>();
                         });
 
                         _ = webBuilder.Configure(app =>
