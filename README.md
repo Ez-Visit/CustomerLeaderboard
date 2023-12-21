@@ -21,4 +21,22 @@ ConcurrentDictionary.OrderBy的性能在大数据量下是很一般的。再加上每次查询的时候都
 #### 4、为了提高内存中查询客户排名的性能，引入KeyedCollection。
 它内部使用了 Dictionary 实现的索引，这使得根据键值快速查找项的性能非常高，使得可以通过键来访问和管理集合中的元素。 
 
-参考资料 https://learn.microsoft.com/zh-cn/dotnet/standard/collections/sorted-collection-types
+
+参考资料：
+https://learn.microsoft.com/zh-cn/dotnet/standard/collections/sorted-collection-types
+
+
+新的思路 CustomerRankingBySkipListService，代码待完善，基于跳表 
+更新排行榜算法：当前代码的更新排行榜算法比较简单粗暴，每次更新分数后都重新计算整个排行榜。
+这样会导致排行榜数据量大时的性能问题。
+可以考虑使用更高效的数据结构来维护排行榜，例如使用跳表（Skip List）或平衡二叉树（如AVL树）来实现有序的排行榜，
+从而在更新分数时只需更新相应的节点，而不必重新计算整个排行榜。
+
+
+选择跳表的理由：
+跳表拥有平衡二叉树相同的查询效率，但是跳表对于树平衡的实现是基于一种随机化的算法的，相对于AVL树/B树（B-Tree）/B+树（B+Tree）/红黑树的实现简单得多。
+针对大体量、海量数据集中查找指定数据有更好的解决方案，我们得评估时间、空间的成本和收益。
+跳表同样支持对数据进行高效的查找，插入和删除数据操作时间复杂度能与平衡二叉树媲美，最重要的是跳表的实现比平衡二叉树简单几个级别。缺点就是“以空间换时间”方式存在一定数据冗余。
+如果存储的数据是大对象，跳表冗余的只是指向数据的指针，几乎可以不计使用的内存空间。
+https://zhuanlan.zhihu.com/p/68516038 数据结构与算法——跳表
+https://www.cnblogs.com/Laymen/p/14084664.html 跳表(SkipList)原理篇
