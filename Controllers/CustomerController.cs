@@ -5,9 +5,15 @@ namespace CustomerLeaderboard.Controllers
 {
     [ApiController]
     [Route("[controller]")]
-    public class CustomerController(CustomerRankingService customerRankingService) : ControllerBase
+    public class CustomerController : ControllerBase
     {
-        private readonly CustomerRankingService customerRankingService = customerRankingService;
+        //private readonly CustomerRankingService customerRankingService = customerRankingService;
+        private readonly CustomerRankingBySkipListService skipListService;
+
+        public CustomerController(CustomerRankingBySkipListService skipListService)
+        {
+            this.skipListService = skipListService;
+        }
 
         [HttpPost("{customerid}/score/{score}")]
         public async Task<ActionResult<decimal>> UpdateScore(long customerId, decimal score)
@@ -22,7 +28,7 @@ namespace CustomerLeaderboard.Controllers
                 return BadRequest(ModelState);
             }
 
-            var updatedScore = await customerRankingService.UpdateScore(customerId, score);
+            var updatedScore = await skipListService.UpdateScore(customerId, score);
             return updatedScore;
         }
 

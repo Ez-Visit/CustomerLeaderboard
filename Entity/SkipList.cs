@@ -5,111 +5,182 @@
     /// </summary>
     public class SkipList
     {
-        private readonly int _maxLevels;
+        public readonly int MaxLevels;
         private readonly CustomerNode _head;
         private readonly Random _random;
-        private static readonly double SKIPLIST_P = 0.5;
+        /// <summary>
+        /// 表示最底层的原始链表层的索引
+        /// </summary>
+        private const int ORIGINAL_LEVEL = 0;
+        /// <summary>
+        /// 控制节点升级的概率
+        /// </summary>
+        private static readonly double PROMOTE_PROBABILITY = 0.5;
 
         public SkipList(int maxLevels)
         {
-            _maxLevels = maxLevels;
-            _head = new CustomerNode { DownLevels = new List<CustomerNode>(maxLevels) };
+            MaxLevels = maxLevels;
+            _head = new CustomerNode { LowerLevels = new List<CustomerNode>() };
             _random = new Random();
         }
 
-        public void InsertOrUpdate(long customerId, decimal score)
+        public bool Search(decimal score, out CustomerNode? position)
         {
-            var updateNodes = new CustomerNode[_maxLevels];
+            position = null;
             var current = _head;
             //从最稀疏的索引层开始查询
-            for (int level = _maxLevels - 1; level >= 0; level--)
+            for (int level = MaxLevels - 1; level >= 0; level--)
             {
+                //当前节点的右侧节点的积分小于目标积分，指针继续往右移动
                 while (current.Next != null && current.Next.Score < score)
                 {
-                    //当前节点的右侧节点的积分小于目标积分，指针继续往右移动
                     current = current.Next;
                 }
 
-                updateNodes[level] = current;
-                if (level > 0)
+                if (level > ORIGINAL_LEVEL && current.LowerLevels.Count > level - 1)
                 {
                     //只要不是最底层的原始链表层(level>0)就往下一层匹配
-                    current = current.DownLevels[level - 1];
+                    current = current.LowerLevels[level - 1];
                 }
-            }
 
-            if (updateNodes[0].Next != null && updateNodes[0].Next.Score == score)
-            {
-                // 分数相同的情况下，通过比较CustomerID来更新节点
-                if (updateNodes[0].Next.CustomerID == customerId)
+                if (level == ORIGINAL_LEVEL)
                 {
-                    updateNodes[0].Next.CustomerID = customerId;
-                    return;
+                    position = current;
                 }
+
             }
-
-            var newNode = new CustomerNode
-            {
-                CustomerID = customerId,
-                Score = score,
-                Next = updateNodes[0].Next,
-                DownLevels = new List<CustomerNode>(_maxLevels)
-            };
-
-            for (int level = 0; level < _maxLevels; level++)
-            {
-                //
-                newNode.DownLevels.Add(level < _maxLevels - 1 ? updateNodes[level].Next : null);
-                updateNodes[level].Next = newNode;
-                if (level > 0 && ShouldPromote())
-                {
-                    newNode = Promote(newNode, level);
-                }
-            }
-
-            UpdateRanks();
-
-            //TODO return the new rank
+            return position != null;
         }
 
-        private bool ShouldPromote()
+        /// <summary>
+        /// 根据概率决定是否将节点提升到更高的层级
+        /// </summary>
+        /// <returns></returns>
+        public bool ShouldPromote()
         {
-            //根据概率决定是否将节点提升到更高的层级
-            return _random.NextDouble() < SKIPLIST_P;
+            return _random.NextDouble() < PROMOTE_PROBABILITY;
         }
 
-        private CustomerNode Promote(CustomerNode node, int level)
+        public CustomerNode Promote(CustomerNode node, int level)
         {
             var newNode = new CustomerNode
             {
                 CustomerID = node.CustomerID,
                 Score = node.Score,
                 Next = node,
-                DownLevels = new List<CustomerNode>(_maxLevels)
+                LowerLevels = new List<CustomerNode>(MaxLevels)
             };
 
-            if (level < _maxLevels - 1)
+            if (level < MaxLevels - 1)
             {
-                newNode.DownLevels.Add(node.DownLevels[level]);
+                newNode.LowerLevels.Add(node.LowerLevels[level]);
             }
 
             if (level > 0)
             {
-                newNode.DownLevels.Add(Promote(node, level - 1));
+                newNode.LowerLevels.Add(Promote(node, level - 1));
             }
 
             return newNode;
         }
 
-        private void UpdateRanks()
+        public void InsertAndUpdateRanks(CustomerNode newNode)
+        {
+            var current = newNode;
+            int rank = current.Rank;
+            while (current.Next != null)
+            {
+                current.Next.Rank = ++rank;
+                current = current.Next;
+            }
+        }
+
+        public void UpdateRank(Customer customer)
+        {
+            var prevRank = customer.Rank;
+            var newRank = 1;
+            var prevCustomer = customer;
+
+            while (prevCustomer.Level > 0)
+            {
+                prevCustomer = prevCustomer.NextCustomers[prevCustomer.Level - 1];
+
+                while (prevCustomer != null && prevCustomer.Score > customer.Score)
+                {
+                    newRank += prevCustomer.Rank;
+                    prevCustomer = prevCustomer.NextCustomers[prevCustomer.Level - 1];
+                }
+
+                if (prevCustomer != null && prevCustomer.Score == customer.Score && prevCustomer.CustomerID < customer.CustomerID)
+                {
+                    newRank += prevCustomer.Rank;
+                    prevCustomer = prevCustomer.NextCustomers[prevCustomer.Level - 1];
+                }
+            }
+
+            if (prevRank != newRank)
+            {
+                customer.Rank = newRank;
+                UpdateNextCustomers(customer, prevRank, newRank);
+            }
+        }
+
+        private void UpdateNextCustomers(Customer customer, int prevRank, int newRank)
+        {
+            if (newRank > prevRank)
+            {
+                if (newRank > customer.Level)
+                {
+                    var newLevel = customer.Level + 1;
+                    var newNextCustomers = new Customer[newLevel];
+                    Array.Copy(customer.NextCustomers, newNextCustomers, customer.Level);
+                    newNextCustomers[newLevel - 1] = null;
+                    customer.NextCustomers = newNextCustomers;
+                    customer.Level = newLevel;
+                }
+
+                for (int i = prevRank; i < newRank; i++)
+                {
+                    customer.NextCustomers[i] = customer.NextCustomers[i - 1];
+                    customer.NextCustomers[i - 1] = customer;
+                }
+            }
+            else if (newRank < prevRank)
+            {
+                for (int i = customer.Level - 1; i >= newRank; i--)
+                {
+                    customer.NextCustomers[i] = null;
+                }
+
+                customer.Level = newRank;
+            }
+        }
+
+        public void UpdateRanks(CustomerNode newNode)
         {
             var current = _head.Next;
             int rank = 1;
             while (current != null)
             {
+                if ((current.Score < newNode.Score
+                    && current.CustomerID != newNode.CustomerID)
+                    || (current.Score == newNode.Score
+                    && current.CustomerID < newNode.CustomerID))
+                {
+                    rank++;
+                }
                 current.Rank = rank;
                 rank++;
                 current = current.Next;
+            }
+        }
+
+        public void InsertIntoSkipList(CustomerNode newNode, CustomerNode position, int level)
+        {
+            for (int i = 0; i <= level; i++)
+            {
+                newNode.LowerLevels.Add(position.LowerLevels[i]);
+                position.LowerLevels[i] = newNode;
             }
         }
 
@@ -130,6 +201,7 @@
 
         public CustomerNode FindNodeByCustomerId(long customerId)
         {
+
             var current = _head;
             while (current != null)
             {
@@ -143,10 +215,10 @@
         }
 
 
-        private CustomerNode FindNodeByRank(int rank)
+        public CustomerNode FindNodeByRank(int rank)
         {
             var current = _head;
-            for (int level = _maxLevels - 1; level >= 0; level--)
+            for (int level = MaxLevels - 1; level >= 0; level--)
             {
                 while (current.Next != null && current.Next.Rank <= rank)
                 {
@@ -154,7 +226,7 @@
                 }
                 if (level > 0)
                 {
-                    current = current.DownLevels[level - 1];
+                    current = current.LowerLevels[level - 1];
                 }
             }
             return current;

@@ -4,28 +4,106 @@ namespace CustomerLeaderboard.BizService
 {
     public class CustomerRankingBySkipListService
     {
-        private static readonly ReaderWriterLockSlim locker = new ReaderWriterLockSlim();
-        private readonly SkipList skipList;
+        private static readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
+        private readonly SkipList _skipList;
+        private readonly Dictionary<long, Customer> _customers = new Dictionary<long, Customer>();
+
+        public CustomerRankingBySkipListService()
+        {
+            _skipList = new SkipList(4);
+        }
 
         public CustomerRankingBySkipListService(int maxLevels)
         {
-            skipList = new SkipList(maxLevels);
+            _skipList = new SkipList(maxLevels);
         }
 
         public async Task<decimal> UpdateScore(long customerId, decimal score)
         {
-            return await Task.Run(() =>
+            return await Task.Run(async () =>
             {
-                locker.EnterWriteLock();
+                _lock.EnterUpgradeableReadLock();
                 try
                 {
-                    skipList.InsertOrUpdate(customerId, score);
-                    //TODO: calclate the new socre
-                    return score;
+                    if (_customers.TryGetValue(customerId, out var customer))
+                    {
+                        _lock.EnterWriteLock();
+                        try
+                        {
+                            customer.Score += score;
+                            _skipList.UpdateRank(customer);
+                            return customer.Score;
+                        }
+                        finally
+                        {
+                            _lock.ExitWriteLock();
+                        }
+                    }
+                    else
+                    {
+                        _lock.EnterWriteLock();
+                        try
+                        {
+                            var newCustomer = new Customer
+                            {
+                                CustomerID = customerId,
+                                Score = score,
+                                Rank = 0,
+                                Level = 0,
+                                NextCustomers = new Customer[1]
+                            };
+                            _customers.Add(customerId, newCustomer);
+
+                            int _maxLevels = _skipList.MaxLevels;
+                            var updateNodes = new CustomerNode[_maxLevels];
+                            CustomerNode position;
+
+                            if (_skipList.Search(score, out position))
+                            {
+                                while (position.Next != null && position.Next.Score == score && position.Next.CustomerID < customerId)
+                                {
+                                    position = position.Next;
+                                }
+
+                                if (position.Next != null && position.Next.Score == score && position.Next.CustomerID == customerId)
+                                {
+                                    position.Next.CustomerID = customerId;
+                                    return score;
+                                }
+                            }
+
+                            var newNode = new CustomerNode
+                            {
+                                CustomerID = customerId,
+                                Score = score,
+                                Next = position.Next,
+                                LowerLevels = new List<CustomerNode>()
+                            };
+
+                            for (int level = 0; level < _maxLevels; level++)
+                            {
+                                newNode.LowerLevels.Add(level < _maxLevels - 1 ? updateNodes[level].Next : null);
+                                updateNodes[level].Next = newNode;
+                                if (level > 0 && _skipList.ShouldPromote())
+                                {
+                                    newNode = _skipList.Promote(newNode, level);
+                                }
+                            }
+
+                            _skipList.InsertAndUpdateRanks(newNode);
+
+                            //_skipList.InsertIntoSkipList(newCustomer);
+                            return newCustomer.Score;
+                        }
+                        finally
+                        {
+                            _lock.ExitWriteLock();
+                        }
+                    }
                 }
                 finally
                 {
-                    locker.ExitWriteLock();
+                    _lock.ExitUpgradeableReadLock();
                 }
             });
         }
@@ -34,14 +112,14 @@ namespace CustomerLeaderboard.BizService
         {
             return await Task.Run(() =>
             {
-                locker.EnterReadLock();
+                _lock.EnterReadLock();
                 try
                 {
-                    return skipList.GetCustomersByRank(start, end);
+                    return _skipList.GetCustomersByRank(start, end);
                 }
                 finally
                 {
-                    locker.ExitReadLock();
+                    _lock.ExitReadLock();
                 }
             });
         }
@@ -53,19 +131,19 @@ namespace CustomerLeaderboard.BizService
 
             await Task.Run(() =>
             {
-                locker.EnterReadLock();
+                _lock.EnterReadLock();
                 try
                 {
-                    customer = skipList.FindNodeByCustomerId(customerId);
+                    customer = _skipList.FindNodeByCustomerId(customerId);
 
                     if (customer != null)
                     {
                         var current = customer;
                         for (int level = 0; level < high; level++)
                         {
-                            if (current.DownLevels.Count > level && current.DownLevels[level] != null)
+                            if (current.LowerLevels.Count > level && current.LowerLevels[level] != null)
                             {
-                                var neighborNode = current.DownLevels[level];
+                                var neighborNode = current.LowerLevels[level];
                                 neighbors.Add(neighborNode);
                             }
                             else
@@ -91,7 +169,7 @@ namespace CustomerLeaderboard.BizService
                 }
                 finally
                 {
-                    locker.ExitReadLock();
+                    _lock.ExitReadLock();
                 }
             });
 
@@ -118,7 +196,6 @@ namespace CustomerLeaderboard.BizService
             };
 
         }
-
 
     }
 }

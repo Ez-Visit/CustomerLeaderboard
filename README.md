@@ -40,3 +40,21 @@ https://learn.microsoft.com/zh-cn/dotnet/standard/collections/sorted-collection-
 如果存储的数据是大对象，跳表冗余的只是指向数据的指针，几乎可以不计使用的内存空间。
 https://zhuanlan.zhihu.com/p/68516038 数据结构与算法——跳表
 https://www.cnblogs.com/Laymen/p/14084664.html 跳表(SkipList)原理篇
+
+
+红黑树是一种自平衡的二叉搜索树，它的空间复杂度是 O(n)，其中 n 是元素的数量。
+红黑树的优点是它可以提高查找的效率，因为它只需要维护一个层次的指针。
+红黑树的缺点是它在插入和删除的时候可能需要做一些平衡的操作，这样的操作可能会涉及到整个树的其他部分，增加代码的复杂性和运行时的开销。
+另外，红黑树在并发环境下可能需要加锁，这会降低性能和效率。
+
+跳表是一种动态的数据结构，它可以在不重新分配内存的情况下添加或删除元素。跳表的空间复杂度是 O(n logn)，其中 n 是元素的数量。
+跳表的优点是它可以节省内存，因为它不需要预先分配一个固定大小的数组。
+跳表的缺点是它需要维护多个层次的指针，这会增加代码的复杂性和运行时的开销。 
+但是，跳表在并发环境下有一个优势，跳表的操作更加局部性，锁需要盯住的节点更少，因此在这样的情况下性能好一些。
+
+https://cloud.tencent.com/developer/article/1867678 游戏排行榜-跳表实现原理分析
+https://zhuanlan.zhihu.com/p/638243227 
+https://blog.csdn.net/qpzkobe/article/details/80056807 
+https://blog.csdn.net/u013709270/article/details/53470428
+
+https://www.jianshu.com/p/9d8296562806 Skip List--跳表（全网最详细的跳表文章没有之一）

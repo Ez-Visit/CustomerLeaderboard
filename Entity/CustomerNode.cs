@@ -15,12 +15,13 @@
         /// </summary>
         public int Rank { get; set; }
         /// <summary>
-        /// 右侧的数据节点
+        /// 指向下一个具有更低排名的客户
         /// </summary>
         public CustomerNode Next { get; set; }
         /// <summary>
         /// 下层索引节点
         /// </summary>
-        public List<CustomerNode> DownLevels { get; set; }
+        public List<CustomerNode> LowerLevels { get; set; }
+
     }
 }
