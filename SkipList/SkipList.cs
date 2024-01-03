@@ -1,7 +1,4 @@
-﻿using CustomerLeaderboard.Entity;
-using System.Reflection.Emit;
-
-namespace CustomerLeaderboard.SkipList
+﻿namespace CustomerLeaderboard.SkipList
 {
     /// <summary>
     /// 客户积分排行跳表 仿照redis的实现
@@ -267,7 +264,7 @@ namespace CustomerLeaderboard.SkipList
             // 判断排名是否合法
             if (rank < 1 || rank > Count)
             {
-                throw new ArgumentOutOfRangeException(nameof(rank));
+                //throw new ArgumentOutOfRangeException(nameof(rank));
             }
             // 从指定的节点开始，从上到下，从左到右，查找目标节点
             SkipListNode<T> current = startNode;           
