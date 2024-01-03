@@ -109,7 +109,7 @@ namespace CustomerLeaderboard.BizService
             // 获取刚才添加的客户实体的前一个节点
             SkipListNode<Customer>? prevNode = sortedCustomers.GetNodeByIndex(length - 1);
             // 初始化排名为前一个节点的排名加一
-            int rank = (prevNode?.Item?.Rank ?? 1) + 1;
+            int rank = (prevNode?.Item?.Rank ?? 0) + 1;
             // 跳过已经排好序的客户实体，只遍历刚才添加或更新的客户实体
             // 获取刚才添加或更新的客户实体的第一个节点
             var firstNode = prevNode?.LevelsInfo[0].Next;
@@ -136,7 +136,7 @@ namespace CustomerLeaderboard.BizService
                 try
                 {
                     // 判断起始和截止排名是否合法
-                    if (start > 0 && end >= start && end <= sortedCustomers.Count)
+                    if (start > 0 && end >= start)
                     {
                         var startNode = sortedCustomers.GetNodeByRank(start);
                         // 从 startNode 开始，使用一个 while 循环，遍历指定范围内的客户实体
@@ -179,8 +179,8 @@ namespace CustomerLeaderboard.BizService
                         // 判断高位和低位参数是否合法
                         if (high >= 0 && low >= 0)
                         {
-                            int startRank = rank + low - 1;
-                            int endRank = rank - high - 1;
+                            int startRank = rank - high - 1;
+                            int endRank = rank + low - 1;                       
 
                             var startNode = sortedCustomers.GetNodeByRank(startRank);
                             // 从 startNode 开始，使用一个 while 循环，遍历指定范围内的客户实体
