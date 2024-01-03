@@ -52,9 +52,24 @@ https://www.cnblogs.com/Laymen/p/14084664.html 跳表(SkipList)原理篇
 跳表的缺点是它需要维护多个层次的指针，这会增加代码的复杂性和运行时的开销。 
 但是，跳表在并发环境下有一个优势，跳表的操作更加局部性，锁需要盯住的节点更少，因此在这样的情况下性能好一些。
 
+https://blog.csdn.net/gamekit/article/details/79047398 实时排序算法（跳表）C# 代码参考
 https://cloud.tencent.com/developer/article/1867678 游戏排行榜-跳表实现原理分析
-https://zhuanlan.zhihu.com/p/638243227 
-https://blog.csdn.net/qpzkobe/article/details/80056807 
-https://blog.csdn.net/u013709270/article/details/53470428
-
 https://www.jianshu.com/p/9d8296562806 Skip List--跳表（全网最详细的跳表文章没有之一）
+
+https://www.cnblogs.com/mushroom/p/4605690.html 探索c#之跳跃表(SkipList) 
+https://github.com/kencausey/SkipList  github C# 跳表参考
+https://codeleading.com/article/41394038855/ 跳跃表(C#代码)
+
+https://zhuanlan.zhihu.com/p/268809846  游戏积分排行榜的实现
+一种做法是用Redis的zset，相信也有很多游戏在用。
+简单说zset通过dict和skiplist来保证查询更新都是O(log(N))复杂度。通过dict从玩家ID找到分数，然后通过skiplist找到玩家排名。
+
+https://blog.csdn.net/u013709270/article/details/53470428 跳跃表的原理及实现
+
+https://blog.csdn.net/weixin_34113237/article/details/86207744
+https://cloud.tencent.com/developer/article/2169215
+https://zhuanlan.zhihu.com/p/108386262 详解高级数据结构之 跳表
+https://blog.csdn.net/qq_35247337/article/details/107045058
+https://www.cnblogs.com/cdaniu/p/16369412.html 【C# 数据结构】 跳表(skip list)
+
+https://zhuanlan.zhihu.com/p/638243227 

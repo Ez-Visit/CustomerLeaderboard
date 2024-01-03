@@ -1,64 +1,94 @@
 ﻿using CustomerLeaderboard.Entity;
+using CustomerLeaderboard.SkipList;
 
 namespace CustomerLeaderboard.BizService
 {
-    public class CustomerRankingBySkipListService
+    public class CustomerRankingManager
     {
-        private static readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
-        private readonly SkipList _skipList;
-        private readonly Dictionary<long, Customer> _customers = new Dictionary<long, Customer>();
+        private static readonly CustomerRankingManager INSTANCE = new CustomerRankingManager();
+        private readonly ReaderWriterLockSlim rwLock = new ReaderWriterLockSlim();
+        private readonly Dictionary<long, Customer> customers = new Dictionary<long, Customer>();
+        private readonly SkipList<Customer> sortedCustomers;
 
-        public CustomerRankingBySkipListService()
+        /// <summary>
+        /// 私有构造函数，防止外部实例化
+        /// </summary>
+        private CustomerRankingManager()
         {
-            _skipList = new SkipList(4);
+            sortedCustomers = new SkipList<Customer>((x, y) =>
+            {
+                // 比较两个客户实体的积分和客户id，返回-1(小于)，0(等于)，1(大于)
+                int result = y.Score.CompareTo(x.Score); // 按积分降序
+                if (result == 0)
+                {
+                    // 按客户id升序
+                    result = x.CustomerID.CompareTo(y.CustomerID);
+                }
+                return result;
+            });
         }
 
-        public CustomerRankingBySkipListService(int maxLevels)
+        /// <summary>
+        /// 获取单例实例
+        /// </summary>
+        /// <returns></returns>
+        public static CustomerRankingManager GetInstance()
         {
-            _skipList = new SkipList(maxLevels);
+            return INSTANCE;
         }
 
+        /// <summary>
+        /// 添加或更新客户实体的方法，返回最新的积分
+        /// </summary>
+        /// <param name="customerId">客户ID</param>
+        /// <param name="score">最新的积分</param>
+        /// <returns></returns>
         public async Task<decimal> UpdateScore(long customerId, decimal score)
         {
             return await Task.Run(async () =>
             {
-                _lock.EnterUpgradeableReadLock();
+                rwLock.EnterUpgradeableReadLock();
                 try
                 {
-                    if (_customers.TryGetValue(customerId, out var customer))
+                    if (customers.TryGetValue(customerId, out var existCustomer))
                     {
-                        _lock.EnterWriteLock();
+                        rwLock.EnterWriteLock();
                         try
                         {
-                            customer.Score += score;
-                            _skipList.UpdateRank(customer);
-                            return customer.Score;
+                            existCustomer.Score += score;
+
+                            //重新排序跳表
+                            sortedCustomers.Remove(existCustomer);
+                            sortedCustomers.Add(existCustomer);
+
+                            return existCustomer.Score;
                         }
                         finally
                         {
-                            _lock.ExitWriteLock();
+                            rwLock.ExitWriteLock();
                         }
                     }
                     else
                     {
-                        _lock.EnterWriteLock();
+                        rwLock.EnterWriteLock();
                         try
                         {
+                            // 不存在则创建新的客户实体
                             var newCustomer = new Customer
                             {
                                 CustomerID = customerId,
                                 Score = score,
-                                Rank = 0,
-                                Level = 0,
-                                NextCustomers = new Customer[1]
+                                Rank = 0 // 初始排名为0
                             };
-                            _customers.Add(customerId, newCustomer);
+                            // 添加到字典和跳表中
+                            customers.Add(customerId, newCustomer);
+                            sortedCustomers.Add(newCustomer);
 
-                            int _maxLevels = _skipList.MaxLevels;
+                            int _maxLevels = sortedCustomers.MaxLevels;
                             var updateNodes = new CustomerNode[_maxLevels];
                             CustomerNode position;
 
-                            if (_skipList.Search(score, out position))
+                            if (sortedCustomers.Search(score, out position))
                             {
                                 while (position.Next != null && position.Next.Score == score && position.Next.CustomerID < customerId)
                                 {
@@ -84,26 +114,26 @@ namespace CustomerLeaderboard.BizService
                             {
                                 newNode.LowerLevels.Add(level < _maxLevels - 1 ? updateNodes[level].Next : null);
                                 updateNodes[level].Next = newNode;
-                                if (level > 0 && _skipList.ShouldPromote())
+                                if (level > 0 && sortedCustomers.ShouldPromote())
                                 {
-                                    newNode = _skipList.Promote(newNode, level);
+                                    newNode = sortedCustomers.Promote(newNode, level);
                                 }
                             }
 
-                            _skipList.InsertAndUpdateRanks(newNode);
+                            sortedCustomers.InsertAndUpdateRanks(newNode);
 
                             //_skipList.InsertIntoSkipList(newCustomer);
                             return newCustomer.Score;
                         }
                         finally
                         {
-                            _lock.ExitWriteLock();
+                            rwLock.ExitWriteLock();
                         }
                     }
                 }
                 finally
                 {
-                    _lock.ExitUpgradeableReadLock();
+                    rwLock.ExitUpgradeableReadLock();
                 }
             });
         }
@@ -112,14 +142,14 @@ namespace CustomerLeaderboard.BizService
         {
             return await Task.Run(() =>
             {
-                _lock.EnterReadLock();
+                rwLock.EnterReadLock();
                 try
                 {
-                    return _skipList.GetCustomersByRank(start, end);
+                    return sortedCustomers.GetCustomersByRank(start, end);
                 }
                 finally
                 {
-                    _lock.ExitReadLock();
+                    rwLock.ExitReadLock();
                 }
             });
         }
@@ -131,10 +161,10 @@ namespace CustomerLeaderboard.BizService
 
             await Task.Run(() =>
             {
-                _lock.EnterReadLock();
+                rwLock.EnterReadLock();
                 try
                 {
-                    customer = _skipList.FindNodeByCustomerId(customerId);
+                    customer = sortedCustomers.FindNodeByCustomerId(customerId);
 
                     if (customer != null)
                     {
@@ -169,7 +199,7 @@ namespace CustomerLeaderboard.BizService
                 }
                 finally
                 {
-                    _lock.ExitReadLock();
+                    rwLock.ExitReadLock();
                 }
             });
 

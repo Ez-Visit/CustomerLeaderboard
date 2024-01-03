@@ -7,12 +7,10 @@ namespace CustomerLeaderboard.Controllers
     [Route("[controller]")]
     public class CustomerController : ControllerBase
     {
-        //private readonly CustomerRankingService customerRankingService = customerRankingService;
-        private readonly CustomerRankingBySkipListService skipListService;
+        private readonly CustomerRankingManager rankingManager = CustomerRankingManager.GetInstance();
 
-        public CustomerController(CustomerRankingBySkipListService skipListService)
+        public CustomerController()
         {
-            this.skipListService = skipListService;
         }
 
         [HttpPost("{customerid}/score/{score}")]
@@ -28,7 +26,7 @@ namespace CustomerLeaderboard.Controllers
                 return BadRequest(ModelState);
             }
 
-            var updatedScore = await skipListService.UpdateScore(customerId, score);
+            var updatedScore = await rankingManager.UpdateScore(customerId, score);
             return updatedScore;
         }
 

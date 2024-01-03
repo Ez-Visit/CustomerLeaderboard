@@ -18,7 +18,6 @@ internal class Program
                         {
                             services.AddControllers();
                             services.AddSingleton<CustomerRankingService>();
-                            services.AddSingleton<CustomerRankingBySkipListService>();
                         });
 
                         _ = webBuilder.Configure(app =>
