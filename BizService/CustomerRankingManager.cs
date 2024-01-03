@@ -59,7 +59,6 @@ namespace CustomerLeaderboard.BizService
                             //重新排序跳表
                             sortedCustomers.Remove(customer);
                             sortedCustomers.Add(customer);
-
                         }
                         finally
                         {
@@ -88,7 +87,10 @@ namespace CustomerLeaderboard.BizService
                         }
                     }
 
-                    UpdateRank();
+                    // 记录跳表的长度
+                    uint length = sortedCustomers.Count;
+
+                    UpdateRank(length);
                     return customer.Score;
                 }
                 finally
@@ -98,18 +100,29 @@ namespace CustomerLeaderboard.BizService
             });
         }
 
-        // 更新所有客户的排名的方法
-        private void UpdateRank()
+        /// <summary>
+        /// 更新客户排名
+        /// </summary>
+        /// <param name="length"></param>
+        private void UpdateRank(uint length)
         {
-            // 初始化排名为1
-            int rank = 1;
-            // 遍历跳表中的客户实体
-            foreach (Customer customer in sortedCustomers.GetItems())
+            // 获取刚才添加的客户实体的前一个节点
+            SkipListNode<Customer>? prevNode = sortedCustomers.GetNodeByIndex(length - 1);
+            // 初始化排名为前一个节点的排名加一
+            int rank = prevNode?.Item.Rank ?? 0 + 1;
+            // 跳过已经排好序的客户实体，只遍历刚才添加或更新的客户实体
+            // 获取刚才添加或更新的客户实体的第一个节点
+            var firstNode = prevNode?.LevelsInfo[0].Next;
+            // 从第一个节点开始，使用一个 while 循环，遍历刚才添加或更新的客户实体
+            var current = firstNode;
+            while (current != null)
             {
                 // 设置客户的排名
-                customer.Rank = rank;
+                current.Item.Rank = rank;
                 // 排名加一
                 rank++;
+                // 移动到下一个节点
+                current = current.LevelsInfo[0].Next;
             }
         }
 
@@ -125,13 +138,15 @@ namespace CustomerLeaderboard.BizService
                     // 判断起始和截止排名是否合法
                     if (start > 0 && end >= start && end <= sortedCustomers.Count)
                     {
-                        foreach (Customer customer in sortedCustomers.GetItems())
+                        var startNode = sortedCustomers.GetNodeByRank(start);
+                        // 从 startNode 开始，使用一个 while 循环，遍历指定范围内的客户实体
+                        SkipListNode<Customer> current = startNode;
+                        while (current != null && current.Item.Rank <= end)
                         {
-                            // 判断客户的排名是否在范围内
-                            if (customer.Rank >= start && customer.Rank <= end)
-                            {
-                                result.Add(customer);
-                            }
+                            // 将客户实体添加到结果列表中
+                            result.Add(current.Item);
+                            // 移动到下一个节点
+                            current = current.LevelsInfo[0].Next;
                         }
                     }
 
@@ -155,7 +170,7 @@ namespace CustomerLeaderboard.BizService
                 try
                 {
                     // 判断字典中是否存在该客户id
-                    if (customers.TryGetValue(customerId, out Customer customer))
+                    if (customers.TryGetValue(customerId, out Customer? customer))
                     {
                         // 存在则添加到结果列表中
                         result.Add(customer);
@@ -164,21 +179,18 @@ namespace CustomerLeaderboard.BizService
                         // 判断高位和低位参数是否合法
                         if (high >= 0 && low >= 0)
                         {
-                            // 遍历跳表中的客户实体
-                            foreach (Customer c in sortedCustomers.GetItems())
+                            int startRank = rank + low - 1;
+                            int endRank = rank - high - 1;
+
+                            var startNode = sortedCustomers.GetNodeByRank(startRank);
+                            // 从 startNode 开始，使用一个 while 循环，遍历指定范围内的客户实体
+                            SkipListNode<Customer> current = startNode;
+                            while (current != null && current.Item.Rank <= endRank)
                             {
-                                // 判断客户的排名是否在高位范围内
-                                if (c.Rank < rank && c.Rank >= rank - high)
-                                {
-                                    // 添加到结果列表中
-                                    result.Add(c);
-                                }
-                                // 判断客户的排名是否在低位范围内
-                                if (c.Rank > rank && c.Rank <= rank + low)
-                                {
-                                    // 添加到结果列表中
-                                    result.Add(c);
-                                }
+                                // 将客户实体添加到结果列表中
+                                result.Add(current.Item);
+                                // 移动到下一个节点
+                                current = current.LevelsInfo[0].Next;
                             }
                         }
                     }
