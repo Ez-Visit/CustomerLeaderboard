@@ -14,14 +14,14 @@ namespace CustomerLeaderboard.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<CustomerNode>>> GetCustomersByRank(int start, int end)
+        public async Task<ActionResult<List<Customer>>> GetCustomersByRank(int start, int end)
         {
             var leaderboard = await rankingManager.GetCustomersByRank(start, end);
             return leaderboard;
         }
 
         [HttpGet("{customerid}")]
-        public async Task<ActionResult<CustomerWithNeighbors>> GetCustomersByCustomerId(long customerid, int high = 0, int low = 0)
+        public async Task<ActionResult<List<Customer>>> GetCustomersByCustomerId(long customerid, int high = 0, int low = 0)
         {
             var result = await rankingManager.GetCustomersByCustomerId(customerid, high, low);
             return result;

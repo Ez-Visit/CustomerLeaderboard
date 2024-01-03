@@ -40,14 +40,9 @@ namespace CustomerLeaderboard.SkipList
                 header.LevelsInfo[i].Next = null;
                 header.LevelsInfo[i].Span = 0;
             }
-            this.header.Prev = null;
-            this.tail = null;
+            header.Prev = null;
+            tail = null;
         }
-
-
-        public readonly int MaxLevels;
-        private readonly CustomerNode _head;
-
 
         public void Add(T item)
         {
@@ -59,7 +54,6 @@ namespace CustomerLeaderboard.SkipList
             //Level等级从高到低,计算levelMoveSpan和update,currentNode会依次往后遍历
             for (int i = (int)currentLevel - 1; i >= 0; i--)
             {
-
                 //初始化rank[i]为上一层的rank值，rank[i]记录在第curentLevel - 1 到 i层上移动的span值总和
                 rank[i] = ((i + 1 == currentLevel) ? 0 : rank[i + 1]);
                 //然后从当前的SkipListNode往后找，在第i层的Rank累加Span, 直到找到第一个比item大的才结束
@@ -178,7 +172,10 @@ namespace CustomerLeaderboard.SkipList
             }
             //收缩level，最少要有1层
             while (currentLevel > 1 && header.LevelsInfo[currentLevel - 1].Next == null)
+            {
                 currentLevel--;
+            }
+
             Count--;
         }
 
@@ -205,7 +202,6 @@ namespace CustomerLeaderboard.SkipList
 
         public T GetItem(uint index)
         {
-
             uint traversed = 0;
 
             SkipListNode<T> currentNode = this.header;
@@ -226,7 +222,7 @@ namespace CustomerLeaderboard.SkipList
         public List<T> GetItems()
         {
             List<T> rankList = new List<T>();
-            SkipListNode<T> currentNode = this.header;
+            SkipListNode<T> currentNode = header;
             while (currentNode.LevelsInfo[0].Next != null)
             {
                 currentNode = currentNode.LevelsInfo[0].Next;
@@ -267,36 +263,9 @@ namespace CustomerLeaderboard.SkipList
             }
         }
 
-        public bool Search(decimal score, out CustomerNode? position)
-        {
-            position = null;
-            var current = _head;
-            //从最稀疏的索引层开始查询
-            for (int level = MaxLevels - 1; level >= 0; level--)
-            {
-                //当前节点的右侧节点的积分小于目标积分，指针继续往右移动
-                while (current.Next != null && current.Next.Score < score)
-                {
-                    current = current.Next;
-                }
-
-                if (level > ORIGINAL_LEVEL && current.LowerLevels.Count > level - 1)
-                {
-                    //只要不是最底层的原始链表层(level>0)就往下一层匹配
-                    current = current.LowerLevels[level - 1];
-                }
-
-                if (level == ORIGINAL_LEVEL)
-                {
-                    position = current;
-                }
-
-            }
-            return position != null;
-        }
-
         /// <summary>
         /// 为新的skiplist节点生成该节点level数目
+        /// 根据概率决定是否将节点提升到更高的层级
         /// </summary>
         /// <returns></returns>
         private uint RandomLevel()
@@ -308,97 +277,6 @@ namespace CustomerLeaderboard.SkipList
             }
 
             return (level < maxLevel) ? level : maxLevel;
-        }
-
-        /// <summary>
-        /// 根据概率决定是否将节点提升到更高的层级
-        /// </summary>
-        /// <returns></returns>
-        public bool ShouldPromote()
-        {
-            return random.NextDouble() < PROMOTE_PROBABILITY;
-        }
-
-        public CustomerNode Promote(CustomerNode node, int level)
-        {
-            var newNode = new CustomerNode
-            {
-                CustomerID = node.CustomerID,
-                Score = node.Score,
-                Next = node,
-                LowerLevels = new List<CustomerNode>(MaxLevels)
-            };
-
-            if (level < MaxLevels - 1)
-            {
-                newNode.LowerLevels.Add(node.LowerLevels[level]);
-            }
-
-            if (level > 0)
-            {
-                newNode.LowerLevels.Add(Promote(node, level - 1));
-            }
-
-            return newNode;
-        }
-
-        public void InsertAndUpdateRanks(CustomerNode newNode)
-        {
-            var current = newNode;
-            int rank = current.Rank;
-            while (current.Next != null)
-            {
-                current.Next.Rank = ++rank;
-                current = current.Next;
-            }
-        }
-
-        public List<CustomerNode> GetCustomersByRank(int start, int end)
-        {
-            var result = new List<CustomerNode>();
-            var current = _head.Next;
-            while (current != null && current.Rank <= end)
-            {
-                if (current.Rank >= start)
-                {
-                    result.Add(current);
-                }
-                current = current.Next;
-            }
-            return result;
-        }
-
-        public CustomerNode FindNodeByCustomerId(long customerId)
-        {
-
-            var current = _head;
-            while (current != null)
-            {
-                if (current.CustomerID == customerId)
-                {
-                    return current;
-                }
-                current = current.Next;
-            }
-            return null;
-        }
-
-
-        public CustomerNode FindNodeByRank(int rank)
-        {
-            var current = _head;
-            for (int level = MaxLevels - 1; level >= 0; level--)
-            {
-                while (current.Next != null && current.Next.Rank <= rank)
-                {
-                    current = current.Next;
-                }
-                if (level > 0)
-                {
-                    current = current.LowerLevels[level - 1];
-                }
-            }
-            return current;
         }
 
     }

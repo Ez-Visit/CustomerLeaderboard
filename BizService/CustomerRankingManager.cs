@@ -50,18 +50,16 @@ namespace CustomerLeaderboard.BizService
                 rwLock.EnterUpgradeableReadLock();
                 try
                 {
-                    if (customers.TryGetValue(customerId, out var existCustomer))
+                    if (customers.TryGetValue(customerId, out var customer))
                     {
                         rwLock.EnterWriteLock();
                         try
                         {
-                            existCustomer.Score += score;
-
+                            customer.Score += score;
                             //重新排序跳表
-                            sortedCustomers.Remove(existCustomer);
-                            sortedCustomers.Add(existCustomer);
+                            sortedCustomers.Remove(customer);
+                            sortedCustomers.Add(customer);
 
-                            return existCustomer.Score;
                         }
                         finally
                         {
@@ -74,62 +72,24 @@ namespace CustomerLeaderboard.BizService
                         try
                         {
                             // 不存在则创建新的客户实体
-                            var newCustomer = new Customer
+                            customer = new Customer
                             {
                                 CustomerID = customerId,
                                 Score = score,
                                 Rank = 0 // 初始排名为0
                             };
                             // 添加到字典和跳表中
-                            customers.Add(customerId, newCustomer);
-                            sortedCustomers.Add(newCustomer);
-
-                            int _maxLevels = sortedCustomers.MaxLevels;
-                            var updateNodes = new CustomerNode[_maxLevels];
-                            CustomerNode position;
-
-                            if (sortedCustomers.Search(score, out position))
-                            {
-                                while (position.Next != null && position.Next.Score == score && position.Next.CustomerID < customerId)
-                                {
-                                    position = position.Next;
-                                }
-
-                                if (position.Next != null && position.Next.Score == score && position.Next.CustomerID == customerId)
-                                {
-                                    position.Next.CustomerID = customerId;
-                                    return score;
-                                }
-                            }
-
-                            var newNode = new CustomerNode
-                            {
-                                CustomerID = customerId,
-                                Score = score,
-                                Next = position.Next,
-                                LowerLevels = new List<CustomerNode>()
-                            };
-
-                            for (int level = 0; level < _maxLevels; level++)
-                            {
-                                newNode.LowerLevels.Add(level < _maxLevels - 1 ? updateNodes[level].Next : null);
-                                updateNodes[level].Next = newNode;
-                                if (level > 0 && sortedCustomers.ShouldPromote())
-                                {
-                                    newNode = sortedCustomers.Promote(newNode, level);
-                                }
-                            }
-
-                            sortedCustomers.InsertAndUpdateRanks(newNode);
-
-                            //_skipList.InsertIntoSkipList(newCustomer);
-                            return newCustomer.Score;
+                            customers.Add(customerId, customer);
+                            sortedCustomers.Add(customer);
                         }
                         finally
                         {
                             rwLock.ExitWriteLock();
                         }
                     }
+
+                    UpdateRank();
+                    return customer.Score;
                 }
                 finally
                 {
@@ -138,94 +98,99 @@ namespace CustomerLeaderboard.BizService
             });
         }
 
-        public async Task<List<CustomerNode>> GetCustomersByRank(int start, int end)
+        // 更新所有客户的排名的方法
+        private void UpdateRank()
+        {
+            // 初始化排名为1
+            int rank = 1;
+            // 遍历跳表中的客户实体
+            foreach (Customer customer in sortedCustomers.GetItems())
+            {
+                // 设置客户的排名
+                customer.Rank = rank;
+                // 排名加一
+                rank++;
+            }
+        }
+
+        public async Task<List<Customer>> GetCustomersByRank(int start, int end)
         {
             return await Task.Run(() =>
             {
+                List<Customer> result = new List<Customer>();
+                //尝试获取读锁，如果失败则等待
                 rwLock.EnterReadLock();
                 try
                 {
-                    return sortedCustomers.GetCustomersByRank(start, end);
-                }
-                finally
-                {
-                    rwLock.ExitReadLock();
-                }
-            });
-        }
-
-        public async Task<CustomerWithNeighbors> GetCustomersByCustomerId(long customerId, int high, int low)
-        {
-            CustomerNode customer = null;
-            List<CustomerNode> neighbors = new List<CustomerNode>();
-
-            await Task.Run(() =>
-            {
-                rwLock.EnterReadLock();
-                try
-                {
-                    customer = sortedCustomers.FindNodeByCustomerId(customerId);
-
-                    if (customer != null)
+                    // 判断起始和截止排名是否合法
+                    if (start > 0 && end >= start && end <= sortedCustomers.Count)
                     {
-                        var current = customer;
-                        for (int level = 0; level < high; level++)
+                        foreach (Customer customer in sortedCustomers.GetItems())
                         {
-                            if (current.LowerLevels.Count > level && current.LowerLevels[level] != null)
+                            // 判断客户的排名是否在范围内
+                            if (customer.Rank >= start && customer.Rank <= end)
                             {
-                                var neighborNode = current.LowerLevels[level];
-                                neighbors.Add(neighborNode);
-                            }
-                            else
-                            {
-                                break;
-                            }
-                        }
-
-                        current = customer;
-                        for (int level = 0; level <= low; level++)
-                        {
-                            if (current.Next != null)
-                            {
-                                current = current.Next;
-                                neighbors.Add(current);
-                            }
-                            else
-                            {
-                                break;
+                                result.Add(customer);
                             }
                         }
                     }
+
+                    return result;
                 }
                 finally
                 {
                     rwLock.ExitReadLock();
                 }
             });
-
-            return new CustomerWithNeighbors
-            {
-                Customer = MaptoCustomer(customer),
-                Neighbors = neighbors.Select(MaptoCustomer).ToList()
-            };
         }
 
-
-        private Customer MaptoCustomer(CustomerNode customerNode)
+        public async Task<List<Customer>> GetCustomersByCustomerId(long customerId, int high, int low)
         {
-            if (customerNode == null)
+            return await Task.Run(() =>
             {
-                return null;
-            }
-
-            return new Customer
-            {
-                CustomerID = customerNode?.CustomerID ?? 0,
-                Score = customerNode?.Score ?? 0,
-                Rank = customerNode?.Rank ?? 0
-            };
-
+                // 创建空的客户实体列表
+                List<Customer> result = new List<Customer>();
+                // 尝试获取读锁，如果失败则等待
+                rwLock.EnterReadLock();
+                try
+                {
+                    // 判断字典中是否存在该客户id
+                    if (customers.TryGetValue(customerId, out Customer customer))
+                    {
+                        // 存在则添加到结果列表中
+                        result.Add(customer);
+                        // 获取该客户的排名
+                        int rank = customer.Rank;
+                        // 判断高位和低位参数是否合法
+                        if (high >= 0 && low >= 0)
+                        {
+                            // 遍历跳表中的客户实体
+                            foreach (Customer c in sortedCustomers.GetItems())
+                            {
+                                // 判断客户的排名是否在高位范围内
+                                if (c.Rank < rank && c.Rank >= rank - high)
+                                {
+                                    // 添加到结果列表中
+                                    result.Add(c);
+                                }
+                                // 判断客户的排名是否在低位范围内
+                                if (c.Rank > rank && c.Rank <= rank + low)
+                                {
+                                    // 添加到结果列表中
+                                    result.Add(c);
+                                }
+                            }
+                        }
+                    }
+                    // 返回结果列表
+                    return result;
+                }
+                finally
+                {
+                    // 释放读锁
+                    rwLock.ExitReadLock();
+                }
+            });
         }
-
     }
 }
