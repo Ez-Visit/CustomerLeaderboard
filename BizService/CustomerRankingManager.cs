@@ -86,11 +86,16 @@ namespace CustomerLeaderboard.BizService
                             rwLock.ExitWriteLock();
                         }
                     }
-
                     // 记录跳表的长度
-                    uint length = sortedCustomers.Count;
+                    //uint length = sortedCustomers.Count;
+                    //UpdateRank(length);
+                    //TODO  该方法经过测试有缺陷，UpdateRank(length)假设跳表中的节点是按照积分和客户id的顺序排列的。
+                    //如果这个假设不成立，那么就有可能获取到错误的前一个节点。
+                    //例如，如果跳表中有两个客户实体，他们的积分相同，但是客户id不同，那么按照排序规则，他们应该是相邻的。
+                    //但是如果在插入或删除时，跳表的索引没有正确更新，那么他们可能会被分散在不同的位置，导致获取前一个节点的方法失效。
 
-                    UpdateRank(length);
+                    UpdateRank();
+
                     return customer.Score;
                 }
                 finally
@@ -101,6 +106,23 @@ namespace CustomerLeaderboard.BizService
         }
 
         /// <summary>
+        /// 更新所有客户的排名的方法
+        /// </summary>
+        private void UpdateRank()
+        {
+            // 初始化排名为1
+            int rank = 1;
+            // 遍历跳表中的客户实体
+            foreach (Customer customer in sortedCustomers.GetItems())
+            {
+                // 设置客户的排名
+                customer.Rank = rank;
+                // 排名加一
+                rank++;
+            }
+        }
+
+        /// <summary>
         /// 更新客户排名
         /// </summary>
         /// <param name="length"></param>
@@ -108,8 +130,9 @@ namespace CustomerLeaderboard.BizService
         {
             // 获取刚才添加的客户实体的前一个节点
             SkipListNode<Customer>? prevNode = sortedCustomers.GetNodeByIndex(length - 1);
+            int prevRank = prevNode?.Item?.Rank ?? 0;
             // 初始化排名为前一个节点的排名加一
-            int rank = (prevNode?.Item?.Rank ?? 0) + 1;
+            int rank = prevRank + 1;
             // 跳过已经排好序的客户实体，只遍历刚才添加或更新的客户实体
             // 获取刚才添加或更新的客户实体的第一个节点
             var firstNode = prevNode?.LevelsInfo[0].Next;
@@ -163,7 +186,6 @@ namespace CustomerLeaderboard.BizService
         {
             return await Task.Run(() =>
             {
-                // 创建空的客户实体列表
                 List<Customer> result = new List<Customer>();
                 // 尝试获取读锁，如果失败则等待
                 rwLock.EnterReadLock();
@@ -180,7 +202,7 @@ namespace CustomerLeaderboard.BizService
                         if (high >= 0 && low >= 0)
                         {
                             int startRank = rank - high - 1;
-                            int endRank = rank + low - 1;                       
+                            int endRank = rank + low - 1;
 
                             var startNode = sortedCustomers.GetNodeByRank(startRank);
                             // 从 startNode 开始，使用一个 while 循环，遍历指定范围内的客户实体
@@ -194,12 +216,10 @@ namespace CustomerLeaderboard.BizService
                             }
                         }
                     }
-                    // 返回结果列表
                     return result;
                 }
                 finally
                 {
-                    // 释放读锁
                     rwLock.ExitReadLock();
                 }
             });
